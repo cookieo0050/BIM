@@ -1,3 +1,4 @@
+use crate::editor::theme;
 use crate::scene::Scene;
 use egui::Context;
 
@@ -6,8 +7,9 @@ pub fn draw(ctx: &Context, scene: &mut Scene, selected_index: &mut Option<usize>
         .resizable(true)
         .default_width(200.0)
         .show(ctx, |ui| {
-            ui.heading("Scene Hierarchy");
-            ui.separator();
+            theme::panel_title(ui, "Hierarchy");
+
+            ui.add_space(2.0);
 
             let entity_count = scene.entities.len();
             let mut action_delete: Option<usize> = None;
@@ -15,35 +17,43 @@ pub fn draw(ctx: &Context, scene: &mut Scene, selected_index: &mut Option<usize>
             let mut action_up: Option<usize> = None;
             let mut action_down: Option<usize> = None;
 
-            for i in 0..entity_count {
-                let name = scene.entities[i].name.clone();
-                let is_selected = *selected_index == Some(i);
-                let response = ui.selectable_label(is_selected, &name);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for i in 0..entity_count {
+                        let name = scene.entities[i].name.clone();
+                        let is_selected = *selected_index == Some(i);
+                        let response = ui.selectable_label(is_selected, &name);
 
-                if response.clicked() {
-                    *selected_index = Some(i);
-                }
+                        if response.clicked() {
+                            *selected_index = Some(i);
+                        }
 
-                response.context_menu(|ui| {
-                    if ui.button("Delete").clicked() {
-                        action_delete = Some(i);
-                        ui.close_menu();
+                        response.context_menu(|ui| {
+                            if ui.button("Delete").clicked() {
+                                action_delete = Some(i);
+                                ui.close_menu();
+                            }
+                            if ui.button("Duplicate").clicked() {
+                                action_duplicate = Some(i);
+                                ui.close_menu();
+                            }
+                            ui.separator();
+                            if i > 0 && ui.button("Move Up").clicked() {
+                                action_up = Some(i);
+                                ui.close_menu();
+                            }
+                            if i < entity_count - 1 && ui.button("Move Down").clicked() {
+                                action_down = Some(i);
+                                ui.close_menu();
+                            }
+                        });
                     }
-                    if ui.button("Duplicate").clicked() {
-                        action_duplicate = Some(i);
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    if i > 0 && ui.button("Move Up").clicked() {
-                        action_up = Some(i);
-                        ui.close_menu();
-                    }
-                    if i < entity_count - 1 && ui.button("Move Down").clicked() {
-                        action_down = Some(i);
-                        ui.close_menu();
+
+                    if entity_count == 0 {
+                        ui.weak("Scene is empty");
                     }
                 });
-            }
 
             if let Some(idx) = action_delete {
                 scene.entities.remove(idx);

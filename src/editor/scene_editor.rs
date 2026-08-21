@@ -1,3 +1,4 @@
+use crate::editor::theme;
 use crate::editor::{hierarchy, inspector};
 use crate::scene::{GpuPrimitive, MaterialComponent, ShapeType, Scene, TransformComponent};
 use bytemuck;
@@ -154,6 +155,28 @@ struct PostFXUniform {
     bloom_tint_b: f32,
     grain_size: f32,
     denoise_strength: f32,
+    dirblur_angle: f32,
+    dirblur_distance: f32,
+    tiltshift_focus: f32,
+    tiltshift_range: f32,
+    tiltshift_blur: f32,
+    thermal_mix: f32,
+    duotone_shadow_r: f32,
+    duotone_shadow_g: f32,
+    duotone_shadow_b: f32,
+    duotone_highlight_r: f32,
+    duotone_highlight_g: f32,
+    duotone_highlight_b: f32,
+    duotone_amount: f32,
+    halftone_size: f32,
+    halftone_mix: f32,
+    warp_amplitude: f32,
+    warp_frequency: f32,
+    warp_speed: f32,
+    film_scratches: f32,
+    film_flicker: f32,
+    flare_intensity: f32,
+    flare_ghosts: f32,
     enabled_bloom: u32,
     enabled_color_correct: u32,
     enabled_vignette: u32,
@@ -182,6 +205,14 @@ struct PostFXUniform {
     flip_horizontal: u32,
     flip_vertical: u32,
     enabled_denoise: u32,
+    enabled_dir_blur: u32,
+    enabled_tilt_shift: u32,
+    enabled_thermal: u32,
+    enabled_duotone: u32,
+    enabled_halftone: u32,
+    enabled_water_warp: u32,
+    enabled_old_film: u32,
+    enabled_flare: u32,
     _pad0: u32,
     _pad1: u32,
     _pad2: u32,
@@ -233,6 +264,40 @@ struct PostFXState {
 
     enabled_denoise: bool,
     denoise_strength: f32,
+
+    enabled_dir_blur: bool,
+    dirblur_angle: f32,
+    dirblur_distance: f32,
+
+    enabled_tilt_shift: bool,
+    tiltshift_focus: f32,
+    tiltshift_range: f32,
+    tiltshift_blur: f32,
+
+    enabled_flare: bool,
+    flare_intensity: f32,
+    flare_ghosts: i32,
+
+    enabled_water_warp: bool,
+    warp_amplitude: f32,
+    warp_frequency: f32,
+    warp_speed: f32,
+
+    enabled_thermal: bool,
+    thermal_mix: f32,
+
+    enabled_duotone: bool,
+    duotone_shadow: [f32; 3],
+    duotone_highlight: [f32; 3],
+    duotone_amount: f32,
+
+    enabled_halftone: bool,
+    halftone_size: f32,
+    halftone_mix: f32,
+
+    enabled_old_film: bool,
+    film_scratches: f32,
+    film_flicker: f32,
 
     enabled_dither: bool,
     dither_spread: f32,
@@ -353,6 +418,40 @@ impl Default for PostFXState {
 
             enabled_denoise: false,
             denoise_strength: 0.3,
+
+            enabled_dir_blur: false,
+            dirblur_angle: 0.0,
+            dirblur_distance: 0.3,
+
+            enabled_tilt_shift: false,
+            tiltshift_focus: 0.5,
+            tiltshift_range: 0.15,
+            tiltshift_blur: 0.4,
+
+            enabled_flare: false,
+            flare_intensity: 0.6,
+            flare_ghosts: 4,
+
+            enabled_water_warp: false,
+            warp_amplitude: 0.4,
+            warp_frequency: 6.0,
+            warp_speed: 2.0,
+
+            enabled_thermal: false,
+            thermal_mix: 1.0,
+
+            enabled_duotone: false,
+            duotone_shadow: [0.1, 0.1, 0.35],
+            duotone_highlight: [1.0, 0.9, 0.75],
+            duotone_amount: 1.0,
+
+            enabled_halftone: false,
+            halftone_size: 6.0,
+            halftone_mix: 1.0,
+
+            enabled_old_film: false,
+            film_scratches: 0.4,
+            film_flicker: 0.5,
 
             enabled_dither: false,
             dither_spread: 0.0625,
@@ -476,6 +575,28 @@ impl PostFXState {
             grain_response: self.grain_response,
             grain_size: self.grain_size,
             denoise_strength: self.denoise_strength,
+            dirblur_angle: self.dirblur_angle,
+            dirblur_distance: self.dirblur_distance,
+            tiltshift_focus: self.tiltshift_focus,
+            tiltshift_range: self.tiltshift_range,
+            tiltshift_blur: self.tiltshift_blur,
+            thermal_mix: self.thermal_mix,
+            duotone_shadow_r: self.duotone_shadow[0],
+            duotone_shadow_g: self.duotone_shadow[1],
+            duotone_shadow_b: self.duotone_shadow[2],
+            duotone_highlight_r: self.duotone_highlight[0],
+            duotone_highlight_g: self.duotone_highlight[1],
+            duotone_highlight_b: self.duotone_highlight[2],
+            duotone_amount: self.duotone_amount,
+            halftone_size: self.halftone_size,
+            halftone_mix: self.halftone_mix,
+            warp_amplitude: self.warp_amplitude,
+            warp_frequency: self.warp_frequency,
+            warp_speed: self.warp_speed,
+            film_scratches: self.film_scratches,
+            film_flicker: self.film_flicker,
+            flare_intensity: self.flare_intensity,
+            flare_ghosts: self.flare_ghosts as f32,
             dither_spread: self.dither_spread,
             dither_color_count_r: self.dither_color_counts[0],
             dither_color_count_g: self.dither_color_counts[1],
@@ -545,6 +666,14 @@ impl PostFXState {
             flip_horizontal: self.flip_horizontal as u32,
             flip_vertical: self.flip_vertical as u32,
             enabled_denoise: self.enabled_denoise as u32,
+            enabled_dir_blur: self.enabled_dir_blur as u32,
+            enabled_tilt_shift: self.enabled_tilt_shift as u32,
+            enabled_thermal: self.enabled_thermal as u32,
+            enabled_duotone: self.enabled_duotone as u32,
+            enabled_halftone: self.enabled_halftone as u32,
+            enabled_water_warp: self.enabled_water_warp as u32,
+            enabled_old_film: self.enabled_old_film as u32,
+            enabled_flare: self.enabled_flare as u32,
             _pad0: 0,
             _pad1: 0,
             _pad2: 0,
@@ -615,6 +744,7 @@ fn shape_from_string(s: &str) -> ShapeType {
 pub struct SceneEditor {
     pub scene: Scene,
     pub selected_entity_index: Option<usize>,
+    active_tab: usize,
     render_target: Option<egui::TextureId>,
     render_target_texture: Option<wgpu::Texture>,
     accumulation_buffer: Option<wgpu::Buffer>,
@@ -1346,6 +1476,7 @@ impl SceneEditor {
             camera_buffer,
             primitive_buffer,
             camera: CameraState::default(),
+            active_tab: 0,
             frame_index: 0,
             prev_camera_pos: Vec3::new(0.0, 1.0, -5.0),
             prev_camera_yaw: 0.0,
@@ -1833,32 +1964,13 @@ impl SceneEditor {
             self.frame_index = self.frame_index.saturating_add(1);
         }
 
+        theme::apply(ctx);
+
         self.draw_main_menu_bar(ctx, render_state);
         hierarchy::draw(ctx, &mut self.scene, &mut self.selected_entity_index);
-        let action = inspector::draw(ctx, &mut self.scene, self.selected_entity_index);
-
-        match action {
-            inspector::InspectorAction::LoadTexture(entity_index) => {
-                if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Images", &["png", "jpg", "jpeg", "bmp"])
-                    .pick_file()
-                {
-                    self.load_entity_texture(render_state, entity_index, &path);
-                }
-            }
-            inspector::InspectorAction::RemoveTexture(entity_index) => {
-                self.remove_entity_texture(render_state, entity_index);
-            }
-            inspector::InspectorAction::ResetAccumulation => {
-                self.frame_index = 0;
-            }
-            inspector::InspectorAction::None => {}
-        }
-
-        self.draw_skybox_panel(ctx, render_state);
-        self.draw_postfx_panel(ctx);
+        self.draw_properties_panel(ctx, render_state);
         self.draw_viewport(ctx, render_state);
-        self.draw_asset_browser(ctx);
+        self.draw_status_bar(ctx);
 
         self.render(render_state);
     }
@@ -1934,13 +2046,8 @@ impl SceneEditor {
         queue.submit(std::iter::once(encoder.finish()));
     }
 
-    fn draw_postfx_panel(&mut self, ctx: &Context) {
-        egui::SidePanel::right("postfx_panel")
-            .resizable(true)
-            .default_width(220.0)
-            .show(ctx, |ui| {
-                ui.heading("Post Processing");
-                ui.separator();
+    fn draw_postfx_content(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(2.0);
 
                 ui.collapsing("Bloom", |ui| {
                     ui.checkbox(&mut self.postfx_state.enabled_bloom, "Enable Bloom");
@@ -2189,7 +2296,77 @@ impl SceneEditor {
                     ui.checkbox(&mut self.postfx_state.flip_horizontal, "Flip Horizontal");
                     ui.checkbox(&mut self.postfx_state.flip_vertical, "Flip Vertical");
                 });
-            });
+
+                ui.collapsing("Directional Blur", |ui| {
+                    ui.checkbox(&mut self.postfx_state.enabled_dir_blur, "Enable");
+                    ui.add_enabled_ui(self.postfx_state.enabled_dir_blur, |ui| {
+                        ui.add(egui::Slider::new(&mut self.postfx_state.dirblur_angle, -180.0..=180.0).text("Angle"));
+                        ui.add(egui::Slider::new(&mut self.postfx_state.dirblur_distance, 0.0..=1.0).text("Distance"));
+                    });
+                });
+
+                ui.collapsing("Tilt Shift", |ui| {
+                    ui.checkbox(&mut self.postfx_state.enabled_tilt_shift, "Enable");
+                    ui.add_enabled_ui(self.postfx_state.enabled_tilt_shift, |ui| {
+                        ui.add(egui::Slider::new(&mut self.postfx_state.tiltshift_focus, 0.0..=1.0).text("Focus Y"));
+                        ui.add(egui::Slider::new(&mut self.postfx_state.tiltshift_range, 0.01..=0.5).text("Sharp Range"));
+                        ui.add(egui::Slider::new(&mut self.postfx_state.tiltshift_blur, 0.0..=1.0).text("Blur"));
+                    });
+                });
+
+                ui.collapsing("Lens Flare", |ui| {
+                    ui.checkbox(&mut self.postfx_state.enabled_flare, "Enable");
+                    ui.add_enabled_ui(self.postfx_state.enabled_flare, |ui| {
+                        ui.add(egui::Slider::new(&mut self.postfx_state.flare_intensity, 0.0..=3.0).text("Intensity"));
+                        let mut ghosts = self.postfx_state.flare_ghosts;
+                        if ui.add(egui::Slider::new(&mut ghosts, 1..=8).text("Ghosts")).changed() {
+                            self.postfx_state.flare_ghosts = ghosts;
+                        }
+                    });
+                });
+
+                ui.collapsing("Water Warp", |ui| {
+                    ui.checkbox(&mut self.postfx_state.enabled_water_warp, "Enable");
+                    ui.add_enabled_ui(self.postfx_state.enabled_water_warp, |ui| {
+                        ui.add(egui::Slider::new(&mut self.postfx_state.warp_amplitude, 0.0..=1.0).text("Amplitude"));
+                        ui.add(egui::Slider::new(&mut self.postfx_state.warp_frequency, 1.0..=20.0).text("Frequency"));
+                        ui.add(egui::Slider::new(&mut self.postfx_state.warp_speed, 0.0..=10.0).text("Speed"));
+                    });
+                });
+
+                ui.collapsing("Thermal Vision", |ui| {
+                    ui.checkbox(&mut self.postfx_state.enabled_thermal, "Enable");
+                    ui.add_enabled_ui(self.postfx_state.enabled_thermal, |ui| {
+                        ui.add(egui::Slider::new(&mut self.postfx_state.thermal_mix, 0.0..=1.0).text("Mix"));
+                    });
+                });
+
+                ui.collapsing("Duotone", |ui| {
+                    ui.checkbox(&mut self.postfx_state.enabled_duotone, "Enable");
+                    ui.add_enabled_ui(self.postfx_state.enabled_duotone, |ui| {
+                        ui.label("Shadow Color:");
+                        ui.color_edit_button_rgb(&mut self.postfx_state.duotone_shadow);
+                        ui.label("Highlight Color:");
+                        ui.color_edit_button_rgb(&mut self.postfx_state.duotone_highlight);
+                        ui.add(egui::Slider::new(&mut self.postfx_state.duotone_amount, 0.0..=1.0).text("Amount"));
+                    });
+                });
+
+                ui.collapsing("Halftone", |ui| {
+                    ui.checkbox(&mut self.postfx_state.enabled_halftone, "Enable");
+                    ui.add_enabled_ui(self.postfx_state.enabled_halftone, |ui| {
+                        ui.add(egui::Slider::new(&mut self.postfx_state.halftone_size, 2.0..=32.0).text("Cell Size"));
+                        ui.add(egui::Slider::new(&mut self.postfx_state.halftone_mix, 0.0..=1.0).text("Mix"));
+                    });
+                });
+
+                ui.collapsing("Old Film", |ui| {
+                    ui.checkbox(&mut self.postfx_state.enabled_old_film, "Enable");
+                    ui.add_enabled_ui(self.postfx_state.enabled_old_film, |ui| {
+                        ui.add(egui::Slider::new(&mut self.postfx_state.film_scratches, 0.0..=1.0).text("Scratches"));
+                        ui.add(egui::Slider::new(&mut self.postfx_state.film_flicker, 0.0..=1.0).text("Flicker"));
+                    });
+                });
     }
 
     fn draw_main_menu_bar(&mut self, ctx: &Context, render_state: &egui_wgpu::RenderState) {
@@ -2302,15 +2479,67 @@ impl SceneEditor {
         });
     }
 
-    fn draw_skybox_panel(&mut self, ctx: &Context, render_state: &egui_wgpu::RenderState) {
+    fn draw_properties_panel(&mut self, ctx: &Context, render_state: &egui_wgpu::RenderState) {
+        let mut insp_action = inspector::InspectorAction::None;
+        let mut png_load: Option<std::path::PathBuf> = None;
+
+        egui::SidePanel::right("properties_panel")
+            .resizable(true)
+            .default_width(300.0)
+            .min_width(250.0)
+            .show(ctx, |ui| {
+                ui.add_space(2.0);
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.active_tab, 0, "Inspector");
+                    ui.selectable_value(&mut self.active_tab, 1, "World");
+                    ui.selectable_value(&mut self.active_tab, 2, "Post FX");
+                });
+                ui.separator();
+
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        match self.active_tab {
+                            0 => {
+                                insp_action = inspector::draw(ui, &mut self.scene, self.selected_entity_index);
+                            }
+                            1 => {
+                                png_load = self.draw_world_content(ui);
+                            }
+                            _ => {
+                                self.draw_postfx_content(ui);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(path) = png_load {
+            self.load_skybox_image(render_state, &path);
+        }
+
+        match insp_action {
+            inspector::InspectorAction::LoadTexture(entity_index) => {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("Images", &["png", "jpg", "jpeg", "bmp"])
+                    .pick_file()
+                {
+                    self.load_entity_texture(render_state, entity_index, &path);
+                }
+            }
+            inspector::InspectorAction::RemoveTexture(entity_index) => {
+                self.remove_entity_texture(render_state, entity_index);
+            }
+            inspector::InspectorAction::ResetAccumulation => {
+                self.frame_index = 0;
+            }
+            inspector::InspectorAction::None => {}
+        }
+    }
+
+    fn draw_world_content(&mut self, ui: &mut egui::Ui) -> Option<std::path::PathBuf> {
         let mut needs_png_load: Option<std::path::PathBuf> = None;
 
-        egui::SidePanel::right("skybox_panel")
-            .resizable(true)
-            .default_width(200.0)
-            .show(ctx, |ui| {
-                ui.heading("World");
-                ui.separator();
+        ui.add_space(2.0);
 
                 ui.collapsing("Skybox", |ui| {
                     ui.label("Mode:");
@@ -2526,11 +2755,8 @@ impl SceneEditor {
                     2 => "PNG",
                     _ => "Unknown",
                 }));
-            });
 
-        if let Some(path) = needs_png_load {
-            self.load_skybox_image(render_state, &path);
-        }
+        needs_png_load
     }
 
     fn load_skybox_image(&mut self, render_state: &egui_wgpu::RenderState, path: &std::path::Path) {
@@ -2897,6 +3123,27 @@ impl SceneEditor {
                     .inner_margin(0.0),
             )
             .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.add_space(6.0);
+                    let rt_label = if self.raytracing_enabled { "Pause (R)" } else { "Resume (R)" };
+                    if ui.button(rt_label).clicked() {
+                        self.raytracing_enabled = !self.raytracing_enabled;
+                        if self.raytracing_enabled {
+                            self.frame_index = 0;
+                        }
+                    }
+                    if ui.button("Reset View").clicked() {
+                        self.frame_index = 0;
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(6.0);
+                        ui.weak(format!("{}x{}", self.viewport_width, self.viewport_height));
+                        ui.weak(format!("{:.0}%", self.render_scale * 100.0));
+                        ui.weak(format!("frame {}", self.frame_index));
+                    });
+                });
+                ui.separator();
+
                 let available_size = ui.available_size();
                 let scale = self.render_scale.clamp(0.1, 1.0);
                 let new_width = ((available_size.x * scale) as u32).max(1);
@@ -2924,37 +3171,32 @@ impl SceneEditor {
             });
     }
 
-    fn draw_asset_browser(&self, ctx: &Context) {
-        egui::TopBottomPanel::bottom("asset_browser")
-            .resizable(true)
-            .default_height(120.0)
+    fn draw_status_bar(&self, ctx: &Context) {
+        egui::TopBottomPanel::bottom("status_bar")
+            .exact_height(24.0)
             .show(ctx, |ui| {
-                ui.heading("Scene Info");
-                ui.separator();
-                ui.label(format!("Entities: {}", self.scene.entities.len()));
-                ui.label(format!(
-                    "Camera: ({:.1}, {:.1}, {:.1})",
-                    self.camera.position.x, self.camera.position.y, self.camera.position.z
-                ));
-                let fps = ctx.input(|i| i.predicted_dt);
-                let ms = fps * 1000.0;
-                let rt_status = if self.raytracing_enabled { "ON" } else { "OFF (paused)" };
-                ui.label(format!(
-                    "Raytracing: {} | Frame: {} | {:.1}ms ({:.0} FPS) | {} SPP, {} bounces",
-                    rt_status,
-                    self.frame_index,
-                    ms,
-                    if ms > 0.0 { 1000.0 / ms } else { 0.0 },
-                    self.quality_state.samples_per_pixel,
-                    self.quality_state.max_bounces,
-                ));
-                ui.label(format!(
-                    "Internal: {}x{} (scale {:.0}%)",
-                    self.viewport_width,
-                    self.viewport_height,
-                    self.render_scale * 100.0,
-                ));
-                ui.label("WASD: move | Right-click + drag: look | Space/C: up/down | R: toggle raytracing");
+                ui.horizontal_centered(|ui| {
+                    ui.add_space(6.0);
+                    ui.weak("WASD move · RMB+drag look · Space/C up/down · R raytracing");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(6.0);
+                        let dt = ctx.input(|i| i.predicted_dt);
+                        let fps = if dt > 0.0 { 1.0 / dt } else { 0.0 };
+                        ui.weak(format!("{:.0} fps", fps));
+                        ui.weak(format!(
+                            "{} spp · {} bounces",
+                            self.quality_state.samples_per_pixel, self.quality_state.max_bounces
+                        ));
+                        ui.weak(format!("{} entities", self.scene.entities.len()));
+                        ui.weak(format!(
+                            "cam ({:.1}, {:.1}, {:.1})",
+                            self.camera.position.x, self.camera.position.y, self.camera.position.z
+                        ));
+                        if !self.raytracing_enabled {
+                            ui.weak("paused");
+                        }
+                    });
+                });
             });
     }
 }

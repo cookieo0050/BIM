@@ -85,6 +85,28 @@ struct Params {
     bloom_tint_b: f32,
     grain_size: f32,
     denoise_strength: f32,
+    dirblur_angle: f32,
+    dirblur_distance: f32,
+    tiltshift_focus: f32,
+    tiltshift_range: f32,
+    tiltshift_blur: f32,
+    thermal_mix: f32,
+    duotone_shadow_r: f32,
+    duotone_shadow_g: f32,
+    duotone_shadow_b: f32,
+    duotone_highlight_r: f32,
+    duotone_highlight_g: f32,
+    duotone_highlight_b: f32,
+    duotone_amount: f32,
+    halftone_size: f32,
+    halftone_mix: f32,
+    warp_amplitude: f32,
+    warp_frequency: f32,
+    warp_speed: f32,
+    film_scratches: f32,
+    film_flicker: f32,
+    flare_intensity: f32,
+    flare_ghosts: f32,
     enabled_bloom: u32,
     enabled_color_correct: u32,
     enabled_vignette: u32,
@@ -113,6 +135,14 @@ struct Params {
     flip_horizontal: u32,
     flip_vertical: u32,
     enabled_denoise: u32,
+    enabled_dir_blur: u32,
+    enabled_tilt_shift: u32,
+    enabled_thermal: u32,
+    enabled_duotone: u32,
+    enabled_halftone: u32,
+    enabled_water_warp: u32,
+    enabled_old_film: u32,
+    enabled_flare: u32,
     _pad0: u32,
     _pad1: u32,
     _pad2: u32,
@@ -344,6 +374,16 @@ fn hue_rotate(c: vec3<f32>, deg: f32) -> vec3<f32> {
     return vec3<f32>(dot(r_row, c), dot(g_row, c), dot(b_row, c));
 }
 
+fn heat_ramp(t: f32) -> vec3<f32> {
+    let x = clamp(t, 0.0, 1.0);
+    var c = mix(vec3<f32>(0.0, 0.0, 0.15), vec3<f32>(0.45, 0.0, 0.55), smoothstep(0.0, 0.25, x));
+    c = mix(c, vec3<f32>(0.9, 0.1, 0.05), smoothstep(0.25, 0.5, x));
+    c = mix(c, vec3<f32>(1.0, 0.55, 0.0), smoothstep(0.5, 0.75, x));
+    c = mix(c, vec3<f32>(1.0, 0.95, 0.4), smoothstep(0.75, 0.92, x));
+    c = mix(c, vec3<f32>(1.0), smoothstep(0.92, 1.0, x));
+    return c;
+}
+
 fn apply_sepia(c: vec3<f32>, amount: f32) -> vec3<f32> {
     let sepia = vec3<f32>(
         dot(c, vec3<f32>(0.393, 0.769, 0.189)),
@@ -470,6 +510,15 @@ fn postfx_composite(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (params_c.flip_horizontal == 1u) { uv_base.x = 1.0 - uv_base.x; }
     if (params_c.flip_vertical == 1u) { uv_base.y = 1.0 - uv_base.y; }
 
+    // ===== Water Warp =====
+    if (params_c.enabled_water_warp == 1u && params_c.warp_amplitude > 0.0001) {
+        let t = params_c.time_seconds * params_c.warp_speed;
+        let freq = max(params_c.warp_frequency, 0.1);
+        let su = uv_base;
+        uv_base.x = su.x + sin(su.y * freq * PI + t) * params_c.warp_amplitude * 0.04;
+        uv_base.y = su.y + cos(su.x * freq * PI * 0.5 + t * 1.3) * params_c.warp_amplitude * 0.03;
+    }
+
     // ===== Zoom =====
     var sample_uv = uv_base;
     if (params_c.enabled_zoom == 1u && params_c.zoom_factor > 1.001) {
@@ -509,6 +558,37 @@ fn postfx_composite(@builtin(global_invocation_id) gid: vec3<u32>) {
         color = bilateral_denoise(vec2<i32>(gid.xy), dims, params_c.denoise_strength);
     }
 
+    // ===== Directional Blur =====
+    if (params_c.enabled_dir_blur == 1u && params_c.dirblur_distance > 0.001) {
+        let ang = radians(params_c.dirblur_angle);
+        let step_vec = vec2<f32>(cos(ang), sin(ang)) * params_c.dirblur_distance * 0.02;
+        var acc = vec3<f32>(0.0);
+        for (var i = 0u; i < 8u; i++) {
+            let fi = f32(i) / 7.0 - 0.5;
+            acc += sample_accum(base_uv + step_vec * fi, dims);
+        }
+        color = acc / 8.0;
+    }
+
+    // ===== Tilt Shift (miniature) =====
+    if (params_c.enabled_tilt_shift == 1u && params_c.tiltshift_blur > 0.001) {
+        let texel = vec2<f32>(1.0 / f32(dims.x), 1.0 / f32(dims.y)) * max(params_c.tiltshift_blur * 6.0, 0.5);
+        let blurred = (
+            sample_accum(base_uv + vec2<f32>(texel.x, 0.0), dims) +
+            sample_accum(base_uv - vec2<f32>(texel.x, 0.0), dims) +
+            sample_accum(base_uv + vec2<f32>(0.0, texel.y), dims) +
+            sample_accum(base_uv - vec2<f32>(0.0, texel.y), dims) +
+            sample_accum(base_uv + texel, dims) +
+            sample_accum(base_uv - texel, dims) +
+            sample_accum(base_uv + vec2<f32>(texel.x, -texel.y), dims) +
+            sample_accum(base_uv - vec2<f32>(texel.x, -texel.y), dims) +
+            color
+        ) / 9.0;
+        let d = abs(uv.y - clamp(params_c.tiltshift_focus, 0.0, 1.0));
+        let mask = smoothstep(params_c.tiltshift_range, params_c.tiltshift_range * 2.0 + 0.01, d);
+        color = mix(color, blurred, clamp(mask, 0.0, 1.0));
+    }
+
     if (params_c.enabled_bloom == 1u) {
         let bloom_tint = vec3<f32>(params_c.bloom_tint_r, params_c.bloom_tint_g, params_c.bloom_tint_b);
         let bloom = clamp(textureSampleLevel(bloom_composite_tex, composite_sampler, base_uv, 0.0).rgb * params_c.bloom_intensity * bloom_tint, vec3<f32>(0.0), vec3<f32>(8.0));
@@ -527,6 +607,21 @@ fn postfx_composite(@builtin(global_invocation_id) gid: vec3<u32>) {
         let bloom = textureSampleLevel(bloom_composite_tex, composite_sampler, base_uv, 0.0).rgb;
         let halation_color = vec3<f32>(params_c.halation_color_r, params_c.halation_color_g, params_c.halation_color_b);
         color = color + bloom * halation_color * params_c.halation_intensity;
+    }
+
+    // ===== Lens Flare (ghosts from bright pass) =====
+    if (params_c.enabled_flare == 1u && params_c.flare_intensity > 0.001) {
+        let to_center = vec2<f32>(0.5) - base_uv;
+        var flare = vec3<f32>(0.0);
+        let ghosts = clamp(floor(params_c.flare_ghosts), 1.0, 8.0);
+        for (var g = 1.0; g <= ghosts; g += 1.0) {
+            let guv = clamp(base_uv + to_center * g * 0.4, vec2<f32>(0.0), vec2<f32>(1.0));
+            let s = textureSampleLevel(bloom_composite_tex, composite_sampler, guv, 0.0).rgb;
+            flare += s / (g * g);
+        }
+        let flip_uv = clamp(vec2<f32>(0.5) + to_center, vec2<f32>(0.0), vec2<f32>(1.0));
+        flare += textureSampleLevel(bloom_composite_tex, composite_sampler, flip_uv, 0.0).rgb * 0.8;
+        color += flare * params_c.flare_intensity * 0.4;
     }
 
     if (params_c.enabled_sharpen == 1u) {
@@ -627,6 +722,21 @@ fn postfx_composite(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     color = pow(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1.0 / 2.2));
 
+    // ===== Thermal Vision =====
+    if (params_c.enabled_thermal == 1u && params_c.thermal_mix > 0.001) {
+        let lum = pp_luminance(color);
+        let heat = heat_ramp(pow(clamp(lum, 0.0, 1.0), 0.7));
+        color = mix(color, heat, clamp(params_c.thermal_mix, 0.0, 1.0));
+    }
+
+    // ===== Duotone =====
+    if (params_c.enabled_duotone == 1u && params_c.duotone_amount > 0.001) {
+        let lum = clamp(pp_luminance(color), 0.0, 1.0);
+        let shadow = vec3<f32>(params_c.duotone_shadow_r, params_c.duotone_shadow_g, params_c.duotone_shadow_b);
+        let highlight = vec3<f32>(params_c.duotone_highlight_r, params_c.duotone_highlight_g, params_c.duotone_highlight_b);
+        color = mix(color, mix(shadow, highlight, lum), clamp(params_c.duotone_amount, 0.0, 1.0));
+    }
+
     // ===== Night Vision =====
     if (params_c.enabled_nightvision == 1u) {
         let nv_seed = gid.x * 7919u + gid.y * 104729u + u32(params_c.time_seconds * 60.0);
@@ -677,6 +787,33 @@ fn postfx_composite(@builtin(global_invocation_id) gid: vec3<u32>) {
         dithered.g = floor((params_c.dither_color_count_g - 1.0) * dithered.g + 0.5) / (params_c.dither_color_count_g - 1.0);
         dithered.b = floor((params_c.dither_color_count_b - 1.0) * dithered.b + 0.5) / (params_c.dither_color_count_b - 1.0);
         color = clamp(dithered, vec3<f32>(0.0), vec3<f32>(1.0));
+    }
+
+    // ===== Halftone =====
+    if (params_c.enabled_halftone == 1u && params_c.halftone_mix > 0.001) {
+        let cell = max(params_c.halftone_size, 2.0);
+        let local = fract(vec2<f32>(gid.xy) / cell) - vec2<f32>(0.5);
+        let lum = clamp(pp_luminance(color), 0.0, 1.0);
+        let dot_r = sqrt(1.0 - lum) * 0.65;
+        let ink = 1.0 - smoothstep(dot_r - 0.08, dot_r, length(local));
+        let ht = mix(vec3<f32>(1.0), vec3<f32>(0.05), ink);
+        color = mix(color, ht, clamp(params_c.halftone_mix, 0.0, 1.0));
+    }
+
+    // ===== Old Film (scratches + flicker) =====
+    if (params_c.enabled_old_film == 1u) {
+        let ft = u32(params_c.time_seconds * 24.0);
+        let fl = 1.0 + (pp_hash(ft * 7919u + gid.y * 13u) - 0.5) * 0.2 * params_c.film_flicker;
+        color *= fl;
+
+        let cols = 24.0;
+        let col = floor(uv.x * cols);
+        let sh = pp_hash(u32(col) * 104729u + ft * 131u);
+        if (sh > 1.0 - params_c.film_scratches * 0.12) {
+            let sub = abs(fract(uv.x * cols) - 0.5);
+            let line = 1.0 - smoothstep(0.0, 0.04, sub);
+            color *= 1.0 - line * 0.7;
+        }
     }
 
     if (params_c.enabled_letterbox == 1u && params_c.letterbox_amount > 0.0) {
