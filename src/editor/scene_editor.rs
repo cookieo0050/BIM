@@ -1940,6 +1940,9 @@ impl SceneEditor {
     }
 
     pub fn update(&mut self, ctx: &Context, render_state: &egui_wgpu::RenderState) {
+        if self.raytracing_enabled {
+            ctx.request_repaint();
+        }
         self.camera.update(ctx);
         self.postfx_time += ctx.input(|i| i.predicted_dt);
 

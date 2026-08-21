@@ -458,8 +458,8 @@ fn hit_floor(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
         rec.tex_id = 0u;
 
         let grid = fract(rec.point.xz);
-        let is_line_raw = step(grid.x, 0.004) + step(grid.y, 0.004);
-        let is_line = select(0.0, min(is_line_raw, 1.0), camera.floor_grid == 1u);
+        let is_line_raw = step(grid.x, 0.06) + step(grid.y, 0.06);
+        let is_line = select(0.0, min(is_line_raw, 3.0), camera.floor_grid == 1u);
 
         let dist = length(rec.point.xz);
         let fog_factor = clamp(dist * 0.05, 0.0, 1.0);
