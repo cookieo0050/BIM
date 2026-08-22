@@ -57,6 +57,18 @@ struct CameraUniform {
     floor_height: f32,
     sun_shadows: u32,
     _pad7: u32,
+    floor_metallic: f32,
+    floor_ior: f32,
+    floor_grid_scale: f32,
+    floor_grid_thickness: f32,
+    floor_checker: u32,
+    floor_uv_scale: f32,
+    floor_emissive_intensity: f32,
+    _pad8: f32,
+    floor_grid_color: [f32; 3],
+    _pad9: f32,
+    floor_emissive: [f32; 3],
+    _pad10: f32,
 }
 
 #[repr(C)]
@@ -934,7 +946,16 @@ struct FloorState {
     enabled: bool,
     color: [f32; 3],
     roughness: f32,
+    metallic: f32,
+    ior: f32,
     grid: bool,
+    grid_scale: f32,
+    grid_thickness: f32,
+    grid_color: [f32; 3],
+    checker: bool,
+    uv_scale: f32,
+    emissive: [f32; 3],
+    emissive_intensity: f32,
     height: f32,
 }
 
@@ -944,7 +965,16 @@ impl Default for FloorState {
             enabled: true,
             color: [0.82, 0.83, 0.85],
             roughness: 0.15,
+            metallic: 0.0,
+            ior: 1.5,
             grid: true,
+            grid_scale: 1.0,
+            grid_thickness: 0.06,
+            grid_color: [0.66, 0.68, 0.72],
+            checker: false,
+            uv_scale: 1.0,
+            emissive: [0.0, 0.0, 0.0],
+            emissive_intensity: 0.0,
             height: -1.0,
         }
     }
@@ -1907,6 +1937,18 @@ impl SceneEditor {
             floor_height: self.floor_state.height,
             sun_shadows: self.sun_state.shadows as u32,
             _pad7: 0,
+            floor_metallic: self.floor_state.metallic,
+            floor_ior: self.floor_state.ior,
+            floor_grid_scale: self.floor_state.grid_scale,
+            floor_grid_thickness: self.floor_state.grid_thickness,
+            floor_checker: self.floor_state.checker as u32,
+            floor_uv_scale: self.floor_state.uv_scale,
+            floor_emissive_intensity: self.floor_state.emissive_intensity,
+            _pad8: 0.0,
+            floor_grid_color: self.floor_state.grid_color,
+            _pad9: 0.0,
+            floor_emissive: self.floor_state.emissive,
+            _pad10: 0.0,
         };
 
         queue.write_buffer(
@@ -2687,12 +2729,49 @@ impl SceneEditor {
                         if ui.add(egui::Slider::new(&mut self.floor_state.roughness, 0.0..=1.0).text("Roughness")).changed() {
                             self.frame_index = 0;
                         }
-                        if ui.checkbox(&mut self.floor_state.grid, "Show Grid").changed() {
+                        if ui.add(egui::Slider::new(&mut self.floor_state.metallic, 0.0..=1.0).text("Metallic")).changed() {
+                            self.frame_index = 0;
+                        }
+                        if ui.add(egui::Slider::new(&mut self.floor_state.ior, 1.0..=2.5).text("IOR / Reflectivity")).changed() {
+                            self.frame_index = 0;
+                        }
+                        if ui.add(egui::Slider::new(&mut self.floor_state.uv_scale, 0.1..=10.0).text("Pattern Scale")).changed() {
                             self.frame_index = 0;
                         }
                         if ui.add(egui::Slider::new(&mut self.floor_state.height, -5.0..=2.0).text("Height")).changed() {
                             self.frame_index = 0;
                         }
+
+                        ui.collapsing("Grid", |ui| {
+                            if ui.checkbox(&mut self.floor_state.grid, "Show Grid").changed() {
+                                self.frame_index = 0;
+                            }
+                            if ui.checkbox(&mut self.floor_state.checker, "Checkerboard").changed() {
+                                self.frame_index = 0;
+                            }
+                            if ui.add(egui::Slider::new(&mut self.floor_state.grid_scale, 0.1..=10.0).text("Cell Size")).changed() {
+                                self.frame_index = 0;
+                            }
+                            if ui.add(egui::Slider::new(&mut self.floor_state.grid_thickness, 0.01..=0.4).text("Line Thickness")).changed() {
+                                self.frame_index = 0;
+                            }
+                            let mut gcolor: [f32; 3] = self.floor_state.grid_color;
+                            if ui.color_edit_button_rgb(&mut gcolor).changed() {
+                                self.floor_state.grid_color = gcolor;
+                                self.frame_index = 0;
+                            }
+                        });
+
+                        ui.collapsing("Emissive", |ui| {
+                            if ui.add(egui::Slider::new(&mut self.floor_state.emissive_intensity, 0.0..=10.0).text("Intensity")).changed() {
+                                self.frame_index = 0;
+                            }
+                            let mut ecolor: [f32; 3] = self.floor_state.emissive;
+                            if ui.color_edit_button_rgb(&mut ecolor).changed() {
+                                self.floor_state.emissive = ecolor;
+                                self.frame_index = 0;
+                            }
+                        });
                     });
                 });
 

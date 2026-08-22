@@ -44,6 +44,18 @@ struct Camera {
     floor_height: f32,
     sun_shadows: u32,
     _pad7: u32,
+    floor_metallic: f32,
+    floor_ior: f32,
+    floor_grid_scale: f32,
+    floor_grid_thickness: f32,
+    floor_checker: u32,
+    floor_uv_scale: f32,
+    floor_emissive_intensity: f32,
+    _pad8: f32,
+    floor_grid_color: vec3<f32>,
+    _pad9: f32,
+    floor_emissive: vec3<f32>,
+    _pad10: f32,
 };
 
 struct PrimitiveData {
@@ -454,27 +466,36 @@ fn hit_floor(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
         rec.t = t;
         rec.point = r.origin + r.direction * t;
         rec.normal = vec3<f32>(0.0, 1.0, 0.0);
-        rec.uv = vec2<f32>(rec.point.x * 0.25, rec.point.z * 0.25);
+        rec.uv = vec2<f32>(rec.point.x * 0.25, rec.point.z * 0.25) * camera.floor_uv_scale;
         rec.tex_id = 0u;
 
-        let grid = fract(rec.point.xz);
-        let is_line_raw = step(grid.x, 0.06) + step(grid.y, 0.06);
+        let cell = max(camera.floor_grid_scale, 0.0001);
+        let gp = rec.point.xz / cell;
+        let grid = fract(gp);
+        let is_line_raw = step(grid.x, camera.floor_grid_thickness) + step(grid.y, camera.floor_grid_thickness);
         let is_line = select(0.0, min(is_line_raw, 3.0), camera.floor_grid == 1u);
 
         let dist = length(rec.point.xz);
         let fog_factor = clamp(dist * 0.05, 0.0, 1.0);
 
         let base_floor = camera.floor_color;
-        let line_color = camera.floor_color * 0.8;
-        let tile_color = mix(base_floor, line_color, is_line);
+        let grid_color = camera.floor_grid_color;
+        var albedo = base_floor;
+        albedo = mix(albedo, grid_color, is_line);
 
-        rec.albedo = mix(tile_color, base_floor, fog_factor);
-        rec.emissive = vec3<f32>(0.0);
+        let checker_sum = floor(gp.x) + floor(gp.y);
+        let checker_on = (checker_sum - 2.0 * floor(checker_sum * 0.5)) > 0.5;
+        if (camera.floor_checker == 1u && checker_on) {
+            albedo = albedo * 0.82;
+        }
+
+        rec.albedo = mix(albedo, base_floor, fog_factor);
+        rec.emissive = camera.floor_emissive * camera.floor_emissive_intensity;
         rec.roughness = camera.floor_roughness;
-        rec.metallic = 0.02;
-        rec.ior = 1.5;
+        rec.metallic = camera.floor_metallic;
+        rec.ior = camera.floor_ior;
         rec.opacity = 1.0;
-        rec.uv_scale = vec2<f32>(1.0);
+        rec.uv_scale = vec2<f32>(1.0) * camera.floor_uv_scale;
         rec.uv_offset = vec2<f32>(0.0);
         rec.clearcoat = 0.0;
         rec.sheen = 0.0;

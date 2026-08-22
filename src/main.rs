@@ -20,7 +20,7 @@ fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions::default();
 
     eframe::run_native(
-        "Raytracer Scene Editor",
+        "FIGLORD EDITOR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
         native_options,
         Box::new(|cc| {
             let render_state = cc
